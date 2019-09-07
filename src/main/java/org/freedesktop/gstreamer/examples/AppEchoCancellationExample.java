@@ -199,7 +199,7 @@ public class AppEchoCancellationExample {
                     Element appSrc = createAppSrc(pipe, String.format("remote-participant-src-%d", idx), data);
                     // keep sample rate the same
                     Element resample = makeElement(pipe, "audioresample", String.format("resample-%d", idx));
-                    Caps caps = Caps.fromString("audio/x-raw, rate=48000");
+                    Caps caps = Caps.fromString("audio/x-raw, rate=16000");
                     // this ami data has very low volume
                     Element amplifier = makeElement(pipe, "audioamplify", String.format("audioamplify-%d", idx));
                     amplifier.set("amplification", 5.0);
@@ -219,17 +219,21 @@ public class AppEchoCancellationExample {
             return queue;
         }).forEach(queue -> queue.link(remoteParticipantsMixer));
         Element remoteParticipantsMixerDelay = makeElement(pipe, "entransshift", "participants-mixer-delay");
-        remoteParticipantsMixerDelay.set("delay", 500);
+        remoteParticipantsMixerDelay.set("delay", 100);
         remoteParticipantsMixerDelay.set("running-time", false);
         remoteParticipantsMixer.link(remoteParticipantsMixerDelay);
 
         // create simulated microphone input
         Element localParticipantSource = createAppSrc(pipe, "local-participant", localParticipant);
+        Element resample = makeElement(pipe, "audioresample", "resample-local");
+        Caps caps = Caps.fromString("audio/x-raw, rate=16000");
         Element localParticipantVolume = makeElement(pipe, "volume", "local-participant-volume");
         localParticipantVolume.set("volume", 0.3); // noodle is too loud
         Element simulateMicrophoneMixer = makeElement(pipe, "audiomixer", "simulated-microphone-mixer");
         remoteParticipantsMixerDelay.link(simulateMicrophoneMixer);
-        link(localParticipantSource, localParticipantVolume, simulateMicrophoneMixer);
+        link(localParticipantSource, resample);
+        resample.linkFiltered(localParticipantVolume, caps);
+        link(localParticipantVolume, simulateMicrophoneMixer);
 
         // probe
         List<Element> probes = Streams.mapWithIndex(remoteParticipantTees.stream(), (tee, idx) -> {
@@ -242,7 +246,7 @@ public class AppEchoCancellationExample {
         // add webrtc dsp
         List<Element> dsps = Streams.mapWithIndex(probes.stream(), (probe, idx) -> {
             Element echoDsp = makeElement(pipe, "webrtcdsp", String.format("echo-dsp-%d", idx));
-            echoDsp.set("echo-cancel", true);
+            echoDsp.set("echo-cancel", false);
             echoDsp.set("echo-suppression-level", 1);
             echoDsp.set("probe", probe.getName());
             return echoDsp;
